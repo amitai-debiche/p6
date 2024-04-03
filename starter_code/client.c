@@ -130,6 +130,7 @@ int init_client() {
 	/* mmap dups the fd, no longer needed */
 	close(fd);
 
+	memset(mem, 0, shm_size);
 	int ring_rc = -1;
 	if (ring_rc = init_ring() < 0) {
 		printf("Ring initialization failed with %d as return code\n", ring_rc);
@@ -138,8 +139,6 @@ int init_client() {
 	
 	ring = (struct ring *)mem;
 	shmem_area = mem;
-
-	memset(mem, 0, shm_size);
 
 	if (do_fork)
 		fork_server();
