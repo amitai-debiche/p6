@@ -57,10 +57,11 @@ struct __attribute__((packed, aligned(64))) ring {
 
 /*
  * Initialize the ring
+ * @param r A pointer to the ring
  * @return 0 on success, negative otherwise - this negative value will be
  * printed to output by the client program
 */
-int init_ring();
+int init_ring(struct ring *r);
 
 /*
  * Submit a new item - should be thread-safe
