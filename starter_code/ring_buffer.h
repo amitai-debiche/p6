@@ -50,7 +50,7 @@ struct __attribute__((packed, aligned(64))) ring {
 	uint32_t c_tail;
 	char pad3[60];
 	/* Consumer head - next consumer will consume the data pointed by c_head */
-	uint32_t c_head;
+	_Atomic uint32_t c_head;
 	char pad4[60];
 	/* An array of structs - This is the actual ring */
 	struct buffer_descriptor buffer[RING_SIZE];
