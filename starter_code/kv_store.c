@@ -2,20 +2,31 @@
 #include "ring_buffer.h"
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 struct node{
     key_type k;
     value_type v;
     struct node* next;
 };
-struct node** arr;
+
+struct hashTable {
+    pthread_mutex_t* lock;
+    pthread_mutex_t** arr_lock;
+    struct node** arr;
+};
+struct hashTable* map;
 
 uint size;
 
 void init() {
-    arr = (struct node**)malloc(sizeof(struct node*) * size);
+    map = (struct hashTable*) malloc(sizeof(struct hashTable));
+    pthread_mutex_init(map->lock, NULL);
+    map->arr = (struct node**) malloc(sizeof(struct node*) * size);
+    map->arr_lock = (pthread_mutex_t**) malloc(sizeof(pthread_mutex_t*) * size);
     for(int i = 0; i < size; i++) {
-        arr[i] = NULL;
+        map->arr[i] = NULL;
+        pthread_mutex_init(*(map->arr_lock + i), NULL);
     }
 }
 
@@ -27,10 +38,13 @@ void put(key_type k, value_type v) {
     newNode->v = v;
     newNode->next = NULL;
 
-    if(arr[index] == NULL) {
-        arr[index] = newNode;
+    pthread_mutex_lock(map->lock);
+    if(map->arr[index] == NULL) {
+        map->arr[index] = newNode;
     } else {
-	struct node* tmp = arr[index];
+	pthread_mutex_lock(map->arr_lock[index]);
+	pthread_mutex_unlock(map->lock);
+	struct node* tmp = map->arr[index];
 	if(tmp->k != k) {
             while(tmp != NULL) {
 	        if(tmp->k == k) break;
@@ -39,22 +53,30 @@ void put(key_type k, value_type v) {
 	}
 	if(tmp->k == k) {
           tmp->v = v;
+	  pthread_mutex_unlock(map->arr_lock[index]);
 	} else { // must be end of list
-          tmp = arr[index];
+          tmp = map->arr[index];
 	  while(tmp->next != NULL) tmp = tmp->next; // finding spots
 	  tmp->next = newNode;
+	  pthread_mutex_unlock(map->arr_lock[index]);
 	}
     }
 }
 
 value_type get(key_type k) {
     int index = hash_function(k, size);
-    struct node* tmp = arr[index];
+    pthread_mutex_lock(map->lock);
+    pthread_mutex_lock(map->arr_lock[index]);
+    pthread_mutex_unlock(map->lock);
+    struct node* tmp = map->arr[index];
     
     while(tmp != NULL) {
-        if(tmp->k == k) return tmp->v;
+        if(tmp->k == k){
+	    return tmp->v;
+	}
 	tmp = tmp->next;
     }
+    pthread_mutex_unlock(map->arr_lock[index]);
 
     return 0;
 }
