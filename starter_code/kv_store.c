@@ -3,25 +3,68 @@
 #include <stdlib.h>
 #include <string.h>
 
-value_type* arr;
+struct node{
+    key_type k;
+    value_type v;
+    struct node* next;
+};
+struct node** arr;
 
-void init(uint size) {
-    arr = (value_type*)malloc(sizeof(value_type) * size);
+uint size;
+
+void init() {
+    arr = (struct node**)malloc(sizeof(struct node*) * size);
     for(int i = 0; i < size; i++) {
-	*(arr + i) = 0;
+        arr[i] = NULL;
     }
 }
 
 void put(key_type k, value_type v) {
-    arr[hash_function(k, 1024)] = v;
-}
+    uint index = hash_function(k, size);
+    struct node* newNode = (struct node*) malloc(sizeof(struct node));
 
+    newNode->k = k;
+    newNode->v = v;
+    newNode->next = NULL;
+
+    if(arr[index] == NULL) {
+        arr[index] = newNode;
+    } else {
+	struct node* tmp = arr[index];
+	if(tmp->k != k) {
+            while(tmp != NULL) {
+	        if(tmp->k == k) break;
+                tmp = tmp->next;
+	    }
+	}
+	if(tmp->k == k) {
+          tmp->v = v;
+	} else { // must be end of list
+          tmp = arr[index];
+	  while(tmp->next != NULL) tmp = tmp->next; // finding spots
+	  tmp->next = newNode;
+	}
+    }
+}
 
 value_type get(key_type k) {
-    return arr[hash_function(k, 1024)];
+    int index = hash_function(k, size);
+    struct node* tmp = arr[index];
+    
+    while(tmp != NULL) {
+        if(tmp->k == k) return tmp->v;
+	tmp = tmp->next;
+    }
+
+    return 0;
 }
 
+// ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
-    init(1024);
+    if(argc < 4) return -1;
+    if(argv[2] < 0 || argv[4] < 0) return -1;
+
+    size = *argv[4];
+    init();
     return 0;
 }
