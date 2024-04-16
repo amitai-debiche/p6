@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-
+#include <unistd.h>
 
 #define MAX_THREADS 128
 #define READY 1
@@ -20,8 +20,7 @@ struct node{
 };
 
 struct hashTable {
-    pthread_mutex_t* lock;
-    pthread_mutex_t** arr_lock;
+    pthread_mutex_t* arr_lock;
     struct node** arr;
 };
 
@@ -36,12 +35,11 @@ pthread_t threads[MAX_THREADS];
 
 void hashtable_init() {
     map = (struct hashTable*) malloc(sizeof(struct hashTable));
-    pthread_mutex_init(map->lock, NULL);
     map->arr = (struct node**) malloc(sizeof(struct node*) * hashtable_size);
-    map->arr_lock = (pthread_mutex_t**) malloc(sizeof(pthread_mutex_t*) * hashtable_size);
+    map->arr_lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t) * hashtable_size);
     for(int i = 0; i < hashtable_size; i++) {
         map->arr[i] = NULL;
-        pthread_mutex_init(*(map->arr_lock + i), NULL);
+        pthread_mutex_init(&(map->arr_lock[i]), NULL);
     }
 }
 
@@ -53,12 +51,10 @@ void put(key_type k, value_type v) {
     newNode->v = v;
     newNode->next = NULL;
 
-    pthread_mutex_lock(map->lock);
     if(map->arr[index] == NULL) {
         map->arr[index] = newNode;
     } else {
-	pthread_mutex_lock(map->arr_lock[index]);
-	pthread_mutex_unlock(map->lock);
+	pthread_mutex_lock(&(map->arr_lock[index]));
 	struct node* tmp = map->arr[index];
 	if(tmp->k != k) {
             while(tmp != NULL) {
@@ -68,21 +64,19 @@ void put(key_type k, value_type v) {
 	}
 	if(tmp->k == k) {
           tmp->v = v;
-	  pthread_mutex_unlock(map->arr_lock[index]);
+	  pthread_mutex_unlock(&(map->arr_lock[index]));
 	} else { // must be end of list
           tmp = map->arr[index];
 	  while(tmp->next != NULL) tmp = tmp->next; // finding spots
 	  tmp->next = newNode;
-	  pthread_mutex_unlock(map->arr_lock[index]);
+	  pthread_mutex_unlock(&(map->arr_lock[index]));
 	}
     }
 }
 
 value_type get(key_type k) {
     int index = hash_function(k, hashtable_size);
-    pthread_mutex_lock(map->lock);
-    pthread_mutex_lock(map->arr_lock[index]);
-    pthread_mutex_unlock(map->lock);
+    pthread_mutex_lock(&(map->arr_lock[index]));
     struct node* tmp = map->arr[index];
     
     while(tmp != NULL) {
@@ -91,12 +85,12 @@ value_type get(key_type k) {
 	}
 	tmp = tmp->next;
     }
-    pthread_mutex_unlock(map->arr_lock[index]);
+    pthread_mutex_unlock(&(map->arr_lock[index]));
 
     return 0;
 }
 
-int server_init() {
+void server_init() {
     int fd = open(shm_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (fd < 0)
         perror("open");
@@ -107,8 +101,8 @@ int server_init() {
     char *mem = mmap(NULL, shm_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
         if (mem == (void *)-1) 
 	    perror("mmap");
+    close(fd);
 
-    memset(mem, 0, shm_size);
     ring = (struct ring *)mem;
     shmem_area = mem;
 }

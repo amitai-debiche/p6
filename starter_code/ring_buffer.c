@@ -31,6 +31,7 @@ void ring_submit(struct ring *r, struct buffer_descriptor *bd){
         prod_next = (r->p_head + 1) % RING_SIZE;
         while (prod_next == r->c_tail) {
         }
+	
         success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
     }
     r->buffer[prod_head] = *bd;
@@ -46,8 +47,9 @@ void ring_get(struct ring *r, struct buffer_descriptor *bd){
         cons_next = (r->c_head + 1) % RING_SIZE;
         while (cons_next == r->p_tail){
         }
-
-        success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
+        //uint32_t local_prodhead = r->p_head;
+	//if (local_prodhead > cons_head) 
+        //    success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
     }
     *bd = r->buffer[cons_head];
     r->c_tail = cons_next;
