@@ -8,6 +8,11 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
+
+#define MAX_THREADS 128
+#define READY 1
+#define NOT_READY 0
+
 struct node{
     key_type k;
     value_type v;
@@ -19,13 +24,15 @@ struct hashTable {
     pthread_mutex_t** arr_lock;
     struct node** arr;
 };
+
 struct hashTable* map;
-
-
 uint hashtable_size;
 struct ring *ring = NULL;
 char *shmem_area = NULL;
 char shm_file[] = "shmem_file";
+int num_threads = 4;
+pthread_t threads[MAX_THREADS];
+
 
 void hashtable_init() {
     map = (struct hashTable*) malloc(sizeof(struct hashTable));
@@ -106,14 +113,49 @@ int server_init() {
     shmem_area = mem;
 }
 
+void *thread_function() {
+    while(true) {
+        struct buffer_descriptor bd;
+        ring_get(ring, &bd);
+        if(bd.req_type == PUT) {
+            put(bd.k, bd.v);
+        } else {
+            bd.v = get(bd.k);
+	    bd.ready = READY;
+	    memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
+        }
+    }
+}
+
+void start_threads() {
+    for (int i = 0; i < num_threads; i++) {
+        if(pthread_create(&threads[i], NULL, &thread_function, NULL))
+            perror("pthread_create");
+    }
+}
+
+void wait_for_threads() {
+    for (int i = 0; i < num_threads; i++)
+        if (pthread_join(threads[i], NULL))
+            perror("pthread_join");
+}
+
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
     if(argc < 4) return -1;
     if(argv[2] < 0 || argv[4] < 0) return -1;
 
     hashtable_size = *argv[4];
+    num_threads = *argv[2];
+    
     server_init();
 
     hashtable_init();
+    
+    start_threads();
+
+    wait_for_threads();
+    
+
     return 0;
 }
