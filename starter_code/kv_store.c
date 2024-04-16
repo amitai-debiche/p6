@@ -17,13 +17,17 @@ struct hashTable {
 };
 struct hashTable* map;
 
-uint size;
 
-void init() {
+uint hashtable_size;
+struct ring *ring = NULL;
+char *shmem_area = NULL;
+char shm_file[] = "shmem_file";
+
+void hashtable_init() {
     map = (struct hashTable*) malloc(sizeof(struct hashTable));
     pthread_mutex_init(map->lock, NULL);
-    map->arr = (struct node**) malloc(sizeof(struct node*) * size);
-    map->arr_lock = (pthread_mutex_t**) malloc(sizeof(pthread_mutex_t*) * size);
+    map->arr = (struct node**) malloc(sizeof(struct node*) * hashtable_size);
+    map->arr_lock = (pthread_mutex_t**) malloc(sizeof(pthread_mutex_t*) * hashtable_size);
     for(int i = 0; i < size; i++) {
         map->arr[i] = NULL;
         pthread_mutex_init(*(map->arr_lock + i), NULL);
@@ -31,7 +35,7 @@ void init() {
 }
 
 void put(key_type k, value_type v) {
-    uint index = hash_function(k, size);
+    uint index = hash_function(k, hashtable_size);
     struct node* newNode = (struct node*) malloc(sizeof(struct node));
 
     newNode->k = k;
@@ -64,7 +68,7 @@ void put(key_type k, value_type v) {
 }
 
 value_type get(key_type k) {
-    int index = hash_function(k, size);
+    int index = hash_function(k, hashtable_size);
     pthread_mutex_lock(map->lock);
     pthread_mutex_lock(map->arr_lock[index]);
     pthread_mutex_unlock(map->lock);
@@ -81,12 +85,30 @@ value_type get(key_type k) {
     return 0;
 }
 
+int init_server() {
+    int shm_size = sizeof(struct ring) + 
+		num_threads * win_size * sizeof(struct buffer_descriptor);
+    int fd = open(shm_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    if (fd < 0)
+        perror("open");
+
+    char *mem = mmap(NULL, shm_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+        if (mem == (void *)-1) 
+	    perror("mmap");
+
+    memset(mem, 0, shm_size);
+    ring = (struct ring *)mem;
+    shmem_area = mem;
+}
+
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
     if(argc < 4) return -1;
     if(argv[2] < 0 || argv[4] < 0) return -1;
 
     size = *argv[4];
-    init();
+    server_init();
+
+    hashtable_init();
     return 0;
 }
