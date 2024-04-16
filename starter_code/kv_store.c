@@ -1,8 +1,12 @@
 #include "common.h"
 #include "ring_buffer.h"
+#include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 struct node{
     key_type k;
@@ -28,7 +32,7 @@ void hashtable_init() {
     pthread_mutex_init(map->lock, NULL);
     map->arr = (struct node**) malloc(sizeof(struct node*) * hashtable_size);
     map->arr_lock = (pthread_mutex_t**) malloc(sizeof(pthread_mutex_t*) * hashtable_size);
-    for(int i = 0; i < size; i++) {
+    for(int i = 0; i < hashtable_size; i++) {
         map->arr[i] = NULL;
         pthread_mutex_init(*(map->arr_lock + i), NULL);
     }
@@ -85,12 +89,13 @@ value_type get(key_type k) {
     return 0;
 }
 
-int init_server() {
-    int shm_size = sizeof(struct ring) + 
-		num_threads * win_size * sizeof(struct buffer_descriptor);
+int server_init() {
     int fd = open(shm_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (fd < 0)
         perror("open");
+
+    struct stat* file_stat = (struct stat*)malloc(sizeof(struct stat));
+    int shm_size = (int) file_stat->st_size;
 
     char *mem = mmap(NULL, shm_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
         if (mem == (void *)-1) 
@@ -106,7 +111,7 @@ int main(int argc, char** argv) {
     if(argc < 4) return -1;
     if(argv[2] < 0 || argv[4] < 0) return -1;
 
-    size = *argv[4];
+    hashtable_size = *argv[4];
     server_init();
 
     hashtable_init();
