@@ -38,7 +38,7 @@ struct buffer_descriptor {
  * You can add new fields to the structure (It's very unlikely that you need to) */
 struct __attribute__((packed, aligned(64))) ring {
 	/* Producer tail - where the last valid item is */
-	 uint32_t p_tail; 
+	_Atomic uint32_t p_tail; 
 	char pad1[60];
 	/* Producer head - where producers are putting new elements
 	 * It should be always ahead of p_tail - elements between p_tail and
@@ -47,13 +47,15 @@ struct __attribute__((packed, aligned(64))) ring {
 	char pad2[60];
 	/* Consumer tail - first item to be consumed - producers can't write
 	 * any data here - producers can only write before c_tail */
-	uint32_t c_tail;
+	_Atomic uint32_t c_tail;
 	char pad3[60];
 	/* Consumer head - next consumer will consume the data pointed by c_head */
 	_Atomic uint32_t c_head;
 	char pad4[60];
 	/* An array of structs - This is the actual ring */
 	struct buffer_descriptor buffer[RING_SIZE];
+    atomic_bool is_empty;
+    atomic_bool is_full; 
 };
 
 /*

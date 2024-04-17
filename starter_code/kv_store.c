@@ -130,10 +130,11 @@ void *thread_function() {
         } else {
             bd.v = get(bd.k);
             printf("key:%u value:%u\n", bd.k, bd.v);
-            bd.ready = READY;
-            printf("SEG on memcpy?\n");
-            memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
         }
+        bd.ready = READY;
+        printf("SEG on memcpy?\n");
+        memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
+
     }
 }
 
@@ -152,6 +153,7 @@ void wait_for_threads() {
 
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
+    printf("SERVER STARTED \n");
     for(int i = 0; i < argc; i++) printf("%s\n", argv[i]);
     if(argc < 3) { // could pass in -v apparently
         fprintf(stderr, "Usage: %s -n <serverThreads> -s <hashtableSize>\n", argv[0]);
@@ -183,6 +185,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    printf("SERVER INIT \n");
     server_init();
     hashtable_init();
     start_threads();
