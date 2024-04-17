@@ -31,7 +31,7 @@ void ring_submit(struct ring *r, struct buffer_descriptor *bd){
         prod_head = r->p_head;
         prod_next = (r->p_head + 1) % RING_SIZE;
         printf("prod_next:%u, c_tail:%u\n", prod_next,r->c_tail);
-        if (prod_head != r->c_tail) {
+        if (prod_next != r->c_tail) {
             success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
         }
     }
