@@ -51,10 +51,11 @@ void put(key_type k, value_type v) {
     newNode->v = v;
     newNode->next = NULL;
 
+    pthread_mutex_lock(&(map->arr_lock[index]));
     if(map->arr[index] == NULL) {
         map->arr[index] = newNode;
+	pthread_mutex_unlock(&(map->arr_lock[index]));
     } else {
-        pthread_mutex_lock(&(map->arr_lock[index]));
         struct node* tmp = map->arr[index];
         if(tmp->k != k) {
             while(tmp != NULL) {
@@ -80,13 +81,14 @@ value_type get(key_type k) {
     struct node* tmp = map->arr[index];
     
     while(tmp != NULL) {
-        if(tmp->k == k){
+        if(tmp->k == k) {
+	    pthread_mutex_unlock(&(map->arr_lock[index]));
             return tmp->v;
         }
         tmp = tmp->next;
     }
+    
     pthread_mutex_unlock(&(map->arr_lock[index]));
-
     return 0;
 }
 
@@ -117,11 +119,14 @@ void *thread_function() {
     while(true) {
         printf("somewhere here\n");
         struct buffer_descriptor bd;
+	printf("before ring_get\n");
         ring_get(ring, &bd);
+	printf("after ring_get\n");
         if(bd.req_type == PUT) {
             printf("puts\n");
-            //SEGFAULTS ON PUT
+	    printf("%d %d\n", bd.k, bd.v);
             put(bd.k, bd.v);
+	    printf("finished puts\n");
         } else {
             bd.v = get(bd.k);
             printf("key:%u value:%u\n", bd.k, bd.v);
@@ -147,14 +152,32 @@ void wait_for_threads() {
 
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
-    if(argc != 5) {
+    for(int i = 0; i < argc; i++) printf("%s\n", argv[i]);
+    if(argc < 3) { // could pass in -v apparently
         fprintf(stderr, "Usage: %s -n <serverThreads> -s <hashtableSize>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    num_threads = atoi(argv[2]);
-    hashtable_size = atoi(argv[4]);
+    // parsing num_threads and tablesize
+    char** tmp = (char**) malloc(sizeof(char*) * 2);
+    tmp[0] = (char*) malloc(sizeof(char) * 50);
+    tmp[1] = (char*) malloc(sizeof(char) * 50);
+    tmp[0] = strtok(argv[1], " ");
+    tmp[1] = strtok(NULL, " ");
+    if(strcmp(tmp[0], "-s") == 0)
+        hashtable_size = atoi(tmp[1]);
+    else
+	num_threads = atoi(tmp[1]);
     
+    tmp[0] = strtok(argv[2], " ");
+    tmp[1] = strtok(NULL, " ");
+    if(strcmp(tmp[0], "-s") == 0)
+        hashtable_size = atoi(tmp[1]);
+    else
+        num_threads = atoi(tmp[1]);
+
+    printf("-n: %d -s: %d\n", num_threads, hashtable_size);
+
     if(num_threads <= 0 || hashtable_size <= 0) {
         fprintf(stderr, "Invalid argument(s).\n");
         return EXIT_FAILURE;

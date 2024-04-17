@@ -25,6 +25,7 @@ int init_ring(struct ring *r){
 }
 
 void ring_submit(struct ring *r, struct buffer_descriptor *bd){
+    printf("ring_sub called\n");
     uint32_t prod_head, prod_next, cons_tail;
     bool success = false;
 
@@ -48,6 +49,7 @@ void ring_submit(struct ring *r, struct buffer_descriptor *bd){
 }
 
 void ring_get(struct ring *r, struct buffer_descriptor *bd){
+    printf("ring_get called\n");
     uint32_t cons_next, cons_head, prod_tail;
     bool success = false;
 
