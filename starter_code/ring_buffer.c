@@ -1,6 +1,7 @@
 #include "ring_buffer.h"
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 
 int init_ring(struct ring *r){
     if (r == NULL) {
@@ -29,26 +30,25 @@ void ring_submit(struct ring *r, struct buffer_descriptor *bd){
     while (!success){
         prod_head = r->p_head;
         prod_next = (r->p_head + 1) % RING_SIZE;
-        while (prod_next == r->c_tail) {
+        //printf("prod_next:%u, c_tail:%u\n", prod_next,r->c_tail);
+        if (prod_next != r->c_tail) {
+            success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
         }
-	
-        success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
     }
     r->buffer[prod_head] = *bd;
     r->p_tail = prod_next;
 }
 
 void ring_get(struct ring *r, struct buffer_descriptor *bd){
-    uint32_t cons_next, cons_head;
+    uint32_t cons_next, cons_head, prod_tail;
     bool success = false;
 
     while (!success) {
         cons_head = r->c_head;
         cons_next = (r->c_head + 1) % RING_SIZE;
-        while (cons_next == r->p_tail){
+        if (cons_next != r->p_tail){
+            success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
         }
-        
-	success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
     }
     *bd = r->buffer[cons_head];
     r->c_tail = cons_next;
