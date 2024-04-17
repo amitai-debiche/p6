@@ -13,7 +13,7 @@
 #define READY 1
 #define NOT_READY 0
 
-struct node{
+struct node {
     key_type k;
     value_type v;
     struct node* next;
@@ -54,23 +54,23 @@ void put(key_type k, value_type v) {
     if(map->arr[index] == NULL) {
         map->arr[index] = newNode;
     } else {
-	pthread_mutex_lock(&(map->arr_lock[index]));
-	struct node* tmp = map->arr[index];
-	if(tmp->k != k) {
+        pthread_mutex_lock(&(map->arr_lock[index]));
+        struct node* tmp = map->arr[index];
+        if(tmp->k != k) {
             while(tmp != NULL) {
-	        if(tmp->k == k) break;
+                if(tmp->k == k) break;
                 tmp = tmp->next;
-	    }
-	}
-	if(tmp->k == k) {
-          tmp->v = v;
-	  pthread_mutex_unlock(&(map->arr_lock[index]));
-	} else { // must be end of list
-          tmp = map->arr[index];
-	  while(tmp->next != NULL) tmp = tmp->next; // finding spots
-	  tmp->next = newNode;
-	  pthread_mutex_unlock(&(map->arr_lock[index]));
-	}
+            }
+        }
+        if(tmp->k == k) {
+            tmp->v = v;
+            pthread_mutex_unlock(&(map->arr_lock[index]));
+        } else { // must be end of list
+            tmp = map->arr[index];
+            while(tmp->next != NULL) tmp = tmp->next; // finding spots
+            tmp->next = newNode;
+            pthread_mutex_unlock(&(map->arr_lock[index]));
+        }
     }
 }
 
@@ -81,9 +81,9 @@ value_type get(key_type k) {
     
     while(tmp != NULL) {
         if(tmp->k == k){
-	    return tmp->v;
-	}
-	tmp = tmp->next;
+            return tmp->v;
+        }
+        tmp = tmp->next;
     }
     pthread_mutex_unlock(&(map->arr_lock[index]));
 
@@ -95,12 +95,18 @@ void server_init() {
     if (fd < 0)
         perror("open");
 
-    struct stat* file_stat = (struct stat*)malloc(sizeof(struct stat));
-    int shm_size = (int) file_stat->st_size;
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) < 0) {
+        perror("fstat");
+        exit(EXIT_FAILURE);
+    }
+    int shm_size = (int) file_stat.st_size;
 
     char *mem = mmap(NULL, shm_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-        if (mem == (void *)-1) 
-	    perror("mmap");
+    if (mem == MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
     close(fd);
 
     ring = (struct ring *)mem;
@@ -109,14 +115,19 @@ void server_init() {
 
 void *thread_function() {
     while(true) {
+        printf("somewhere here\n");
         struct buffer_descriptor bd;
         ring_get(ring, &bd);
         if(bd.req_type == PUT) {
+            printf("puts\n");
+            //SEGFAULTS ON PUT
             put(bd.k, bd.v);
         } else {
             bd.v = get(bd.k);
-	    bd.ready = READY;
-	    memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
+            printf("key:%u value:%u\n", bd.k, bd.v);
+            bd.ready = READY;
+            printf("SEG on memcpy?\n");
+            memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
         }
     }
 }
@@ -136,20 +147,23 @@ void wait_for_threads() {
 
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
-    if(argc < 4) return -1;
-    if(argv[2] < 0 || argv[4] < 0) return -1;
+    if(argc != 5) {
+        fprintf(stderr, "Usage: %s -n <serverThreads> -s <hashtableSize>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-    hashtable_size = *argv[4];
-    num_threads = *argv[2];
+    num_threads = atoi(argv[2]);
+    hashtable_size = atoi(argv[4]);
     
+    if(num_threads <= 0 || hashtable_size <= 0) {
+        fprintf(stderr, "Invalid argument(s).\n");
+        return EXIT_FAILURE;
+    }
+
     server_init();
-
     hashtable_init();
-    
     start_threads();
-
     wait_for_threads();
-    
 
-    return 0;
+    return EXIT_SUCCESS;
 }
