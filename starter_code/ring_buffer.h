@@ -54,8 +54,6 @@ struct __attribute__((packed, aligned(64))) ring {
 	char pad4[60];
 	/* An array of structs - This is the actual ring */
 	struct buffer_descriptor buffer[RING_SIZE];
-    atomic_bool is_empty;
-    atomic_bool is_full; 
 };
 
 /*
