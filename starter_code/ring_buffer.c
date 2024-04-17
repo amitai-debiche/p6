@@ -58,6 +58,7 @@ void ring_get(struct ring *r, struct buffer_descriptor *bd){
         if (cons_next != prod_tail){
             success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
         }
+
     }
     *bd = r->buffer[cons_head];
     success = false;
