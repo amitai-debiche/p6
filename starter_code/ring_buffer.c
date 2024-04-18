@@ -28,44 +28,47 @@ void ring_submit(struct ring *r, struct buffer_descriptor *bd){
   //  printf("ring_sub called\n");
     uint32_t prod_head, prod_next, cons_tail;
     bool success = false;
+//    printf("ring submit\n");
 
     while (!success){
         prod_head = r->p_head;
         cons_tail = r->c_tail;
         prod_next = (r->p_head + 1);
-         if ((prod_head >= cons_tail) && (prod_head - cons_tail <= 1024)) {
+         if ((prod_head >= cons_tail) && (prod_head - cons_tail < 1024)) {
             success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
         }
     }
     //printf("EXITS\n");
     r->buffer[prod_head % RING_SIZE] = *bd;
-    success = false;
-    while(!success){
-        success = atomic_compare_exchange_strong(&r->p_tail, &prod_head, prod_next);
-    }
- //   printf("UPDATED TAIL, %u\n", r->p_tail);
-
+   // success = false;
+    r->p_tail = prod_next;
+    //while(!success){
+     //   success = atomic_compare_exchange_strong(&r->p_tail, &prod_head, prod_next);
+    //}
 }
 
 void ring_get(struct ring *r, struct buffer_descriptor *bd){
     uint32_t cons_next, cons_head, prod_tail;
     bool success = false;
+    printf("ring_get called\n");
 
     while (!success) {
         cons_head = r->c_head;
         prod_tail = r->p_tail;
         cons_next = (r->c_head + 1);
-        if (cons_head < prod_tail) {
+//        printf("prod_tail:%u, cons_head:%u\n", prod_tail, cons_head);
+        if (prod_tail > cons_head) {
             success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
         }
     }
     *bd = r->buffer[cons_head % RING_SIZE];
-    success = false;
-    while (!success) {
-        success = atomic_compare_exchange_strong(&r->c_tail, &cons_head, cons_next);
-    }
-//   printf("ring_get exits");
-  //  printf("UPDATED CONSUMER TAIL, %u\n", r->c_tail);
+   // success = false;
+    r->c_tail = cons_next;
+//    printf("Going for tail exchange\n");
+ //   while (!success) {
+  //      success = atomic_compare_exchange_strong(&r->c_tail, &cons_head, cons_next);
+   // }
+    printf("ring get exit\n");
 }
 
 
