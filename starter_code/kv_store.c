@@ -123,19 +123,22 @@ void server_init() {
 }
 
 void *thread_function() {
+    struct buffer_descriptor bd;
     while(true) {
-        struct buffer_descriptor bd;
 	//printf("before ring_get\n");
         ring_get(ring, &bd);
 	//printf("after ring_get\n");
         if(bd.req_type == PUT) {
             //printf("puts\n");
-	    //printf("%d %d\n", bd.k, bd.v);
             put(bd.k, bd.v);
+
+	    if(bd.k == 1)
+                printf("put k:%u v:%u answer:%u\n", bd.k, bd.v, get(bd.k));
 	    //printf("finished puts\n");
         } else {
             bd.v = get(bd.k);
-            //printf("key:%u value:%u\n", bd.k, bd.v);
+	    if(bd.k == 1)
+                printf("get key:%u value:%u\n", bd.k, bd.v);
         }
 	struct buffer_descriptor* window = (struct buffer_descriptor *)(shmem_area + bd.res_off);
         //printf("SEG on memcpy?\n");
