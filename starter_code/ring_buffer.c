@@ -24,16 +24,18 @@ int init_ring(struct ring *r){
     return 0;
 }
 
-void ring_submit(struct ring *r, struct buffer_descriptor *bd){
+void ring_submit(struct ring *r, struct buffer_descriptor *bd) {
   //  printf("ring_sub called\n");
     uint32_t prod_head, prod_next, cons_tail;
     bool success = false;
 
-    while (!success){
+    while (!success) {
         prod_head = r->p_head;
         cons_tail = r->c_tail;
-        prod_next = (r->p_head + 1);
-         if ((prod_head >= cons_tail) && (prod_head - cons_tail <= 1024)) {
+        prod_next = (prod_head + 1);
+
+        // if ((prod_head >= cons_tail) && (prod_head - cons_tail <= 1024)) {
+	if(prod_head - cons_tail < 1024) {
             success = atomic_compare_exchange_strong(&r->p_head, &prod_head, prod_next);
         }
     }
@@ -51,20 +53,23 @@ void ring_get(struct ring *r, struct buffer_descriptor *bd){
     uint32_t cons_next, cons_head, prod_tail;
     bool success = false;
 
+    //printf("in ring_get\n");
     while (!success) {
         cons_head = r->c_head;
         prod_tail = r->p_tail;
-        cons_next = (r->c_head + 1);
+        cons_next = (cons_head + 1);
         if (cons_head < prod_tail) {
             success = atomic_compare_exchange_strong(&r->c_head, &cons_head, cons_next);
         }
     }
+    //printf("%d %d\n", r->c_tail, cons_head);
     *bd = r->buffer[cons_head % RING_SIZE];
     success = false;
     while (!success) {
+	//printf("stuck here %d %d\n", r->c_tail, cons_head);
         success = atomic_compare_exchange_strong(&r->c_tail, &cons_head, cons_next);
     }
-//   printf("ring_get exits");
+  //  printf("ring_get exits");
   //  printf("UPDATED CONSUMER TAIL, %u\n", r->c_tail);
 }
 

@@ -53,14 +53,16 @@ void put(key_type k, value_type v) {
 
     //printf("before acquiring lock\n");
     pthread_mutex_lock(&(map->arr_lock[index]));
+    //printf("acquires lock\n");
 
     if(map->arr[index] == NULL) {
-        map->arr[index] = newNode;
+        //printf("in NULL\n");
+	map->arr[index] = newNode;
         pthread_mutex_unlock(&(map->arr_lock[index]));
+	//printf("in NULL before return\n");
         return;
     }
 
-    //printf("acquires lock\n");
     struct node* cur = map->arr[index];
     struct node* prev = map->arr[index];
 
@@ -74,8 +76,10 @@ void put(key_type k, value_type v) {
 	}
         cur = cur->next;
     }
+    //printf("after while\n");
     prev->next = newNode;
     pthread_mutex_unlock(&(map->arr_lock[index]));
+    //printf("after unlocks\n");
 }
 
 value_type get(key_type k) {
@@ -120,7 +124,6 @@ void server_init() {
 
 void *thread_function() {
     while(true) {
-        //printf("somewhere here\n");
         struct buffer_descriptor bd;
 	//printf("before ring_get\n");
         ring_get(ring, &bd);
@@ -134,10 +137,10 @@ void *thread_function() {
             bd.v = get(bd.k);
             //printf("key:%u value:%u\n", bd.k, bd.v);
         }
-        bd.ready = READY;
-        printf("SEG on memcpy?\n");
-        memcpy((void*)(shmem_area + bd.res_off), &bd, sizeof(struct buffer_descriptor));
-
+	struct buffer_descriptor* window = (struct buffer_descriptor *)(shmem_area + bd.res_off);
+        //printf("SEG on memcpy?\n");
+        memcpy(window, &bd, sizeof(struct buffer_descriptor));
+	window->ready = READY;
     }
 }
 

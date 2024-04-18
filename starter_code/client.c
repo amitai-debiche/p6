@@ -318,10 +318,12 @@ void *thread_function(void *arg) {
 		process_completions(ctx, &last_completed, &last_submitted);
 	}
 
+	printf("Done with submissions TID: %d\n", ctx->tid);
 	PRINTV("Done with subs\n");
 	/* There might be some completions still in flight */
 	while (last_completed < ctx->num_reqs)
 		process_completions(ctx, &last_completed, &last_submitted);
+	//printf("After while\n");
 }
 
 /*
@@ -534,12 +536,12 @@ int main(int argc, char *argv[]) {
 	struct timespec s, e;
 	clock_gettime(CLOCK_REALTIME, &s);
 
-        printf("before start\n");
+        //printf("before start\n");
 	start_threads();
 	wait_for_threads();
-        printf("after wait\n");
+        //printf("after wait\n");
 	clock_gettime(CLOCK_REALTIME, &e);
-	printf("after clock\n");
+	//printf("after clock\n");
 
 	/* Kill the server app */
 	if (child_pid > 0)
