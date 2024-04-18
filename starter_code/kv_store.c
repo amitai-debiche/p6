@@ -51,44 +51,47 @@ void put(key_type k, value_type v) {
     newNode->v = v;
     newNode->next = NULL;
 
+    //printf("before acquiring lock\n");
     pthread_mutex_lock(&(map->arr_lock[index]));
+
     if(map->arr[index] == NULL) {
         map->arr[index] = newNode;
-	pthread_mutex_unlock(&(map->arr_lock[index]));
-    } else {
-        struct node* tmp = map->arr[index];
-        if(tmp->k != k) {
-            while(tmp != NULL) {
-                if(tmp->k == k) break;
-                tmp = tmp->next;
-            }
-        }
-        if(tmp->k == k) {
-            tmp->v = v;
-            pthread_mutex_unlock(&(map->arr_lock[index]));
-        } else { // must be end of list
-            tmp = map->arr[index];
-            while(tmp->next != NULL) tmp = tmp->next; // finding spots
-            tmp->next = newNode;
-            pthread_mutex_unlock(&(map->arr_lock[index]));
-        }
+        pthread_mutex_unlock(&(map->arr_lock[index]));
+        return;
     }
+
+    //printf("acquires lock\n");
+    struct node* cur = map->arr[index];
+    struct node* prev = map->arr[index];
+
+
+    while(cur) {
+        prev = cur;
+	if(cur->k == k) {
+	    cur->v = v;
+	    pthread_mutex_unlock(&(map->arr_lock[index]));
+	    return;
+	}
+        cur = cur->next;
+    }
+    prev->next = newNode;
+    pthread_mutex_unlock(&(map->arr_lock[index]));
 }
 
 value_type get(key_type k) {
     int index = hash_function(k, hashtable_size);
-    pthread_mutex_lock(&(map->arr_lock[index]));
+    //pthread_mutex_lock(&(map->arr_lock[index]));
     struct node* tmp = map->arr[index];
     
     while(tmp != NULL) {
         if(tmp->k == k) {
-	    pthread_mutex_unlock(&(map->arr_lock[index]));
+	    //pthread_mutex_unlock(&(map->arr_lock[index]));
             return tmp->v;
         }
         tmp = tmp->next;
     }
     
-    pthread_mutex_unlock(&(map->arr_lock[index]));
+    //pthread_mutex_unlock(&(map->arr_lock[index]));
     return 0;
 }
 
@@ -117,19 +120,19 @@ void server_init() {
 
 void *thread_function() {
     while(true) {
-        printf("somewhere here\n");
+        //printf("somewhere here\n");
         struct buffer_descriptor bd;
-	printf("before ring_get\n");
+	//printf("before ring_get\n");
         ring_get(ring, &bd);
-	printf("after ring_get\n");
+	//printf("after ring_get\n");
         if(bd.req_type == PUT) {
-            printf("puts\n");
-	    printf("%d %d\n", bd.k, bd.v);
+            //printf("puts\n");
+	    //printf("%d %d\n", bd.k, bd.v);
             put(bd.k, bd.v);
-	    printf("finished puts\n");
+	    //printf("finished puts\n");
         } else {
             bd.v = get(bd.k);
-            printf("key:%u value:%u\n", bd.k, bd.v);
+            //printf("key:%u value:%u\n", bd.k, bd.v);
         }
         bd.ready = READY;
         printf("SEG on memcpy?\n");
@@ -178,14 +181,14 @@ int main(int argc, char** argv) {
     else
         num_threads = atoi(tmp[1]);
 
-    printf("-n: %d -s: %d\n", num_threads, hashtable_size);
+    //printf("-n: %d -s: %d\n", num_threads, hashtable_size);
 
     if(num_threads <= 0 || hashtable_size <= 0) {
         fprintf(stderr, "Invalid argument(s).\n");
         return EXIT_FAILURE;
     }
 
-    printf("SERVER INIT \n");
+    //printf("SERVER INIT \n");
     server_init();
     hashtable_init();
     start_threads();
