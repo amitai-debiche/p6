@@ -1,6 +1,5 @@
 #include "common.h"
 #include "ring_buffer.h"
-#include <assert.h>
 #include <bits/getopt_core.h>
 #include <bits/pthreadtypes.h>
 #include <stdio.h>
@@ -27,8 +26,6 @@ struct hashTable {
     struct node** arr;
 };
 
-struct node *table;
-pthread_spinlock_t *locks;
 struct hashTable* map;
 int hashtable_size = 1000;
 struct ring *ring;
@@ -85,28 +82,18 @@ void put(key_type k, value_type v) {
 value_type get(key_type k) {
 
     int index = hash_function(k, hashtable_size);
-    //pthread_mutex_lock(&(map->arr_lock[index]));
     struct node* tmp = map->arr[index];
 
     while(tmp != NULL) {
         if(tmp->k == k) {
-     //       pthread_mutex_unlock(&(map->arr_lock[index]));
             return tmp->v;
         }
         tmp = tmp->next;
     }
-
-    //pthread_mutex_unlock(&(map->arr_lock[index]));
     return 0;
 }
 
 void server_init() {
-    table = malloc(hashtable_size * sizeof(struct node));
-    locks = malloc(hashtable_size * sizeof(pthread_spinlock_t));
-
-    for (int i = 0; i < hashtable_size; i++)
-        pthread_spin_init(&locks[i], PTHREAD_PROCESS_PRIVATE);
-
     int fd = open(shm_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (fd < 0)
         perror("open");
