@@ -1,5 +1,8 @@
 #include "common.h"
 #include "ring_buffer.h"
+#include <assert.h>
+#include <bits/getopt_core.h>
+#include <bits/pthreadtypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -24,10 +27,12 @@ struct hashTable {
     struct node** arr;
 };
 
+struct node *table;
+pthread_spinlock_t *locks;
 struct hashTable* map;
-uint hashtable_size;
-struct ring *ring = NULL;
-char *shmem_area = NULL;
+int hashtable_size = 1000;
+struct ring *ring;
+char *shmem_area;
 char shm_file[] = "shmem_file";
 int num_threads = 4;
 pthread_t threads[MAX_THREADS];
@@ -45,47 +50,35 @@ void hashtable_init() {
 
 void put(key_type k, value_type v) {
     uint index = hash_function(k, hashtable_size);
-    struct node* newNode = (struct node*) malloc(sizeof(struct node));
+    struct node * b = (&table[index]);
 
-    newNode->k = k;
-    newNode->v = v;
-    newNode->next = NULL;
+    int idx = (b - table) / sizeof(struct node);
+    pthread_spin_lock(&locks[idx]);
 
-    //printf("before acquiring lock\n");
-    pthread_mutex_lock(&(map->arr_lock[index]));
-    //printf("acquires lock\n");
-
-    if(map->arr[index] == NULL) {
-        //printf("in NULL\n");
-	map->arr[index] = newNode;
-        pthread_mutex_unlock(&(map->arr_lock[index]));
-	//printf("in NULL before return\n");
-        return;
-    }
-
-    struct node* cur = map->arr[index];
-    struct node* prev = map->arr[index];
-
-
-    while(cur) {
-        prev = cur;
-	if(cur->k == k) {
-	    cur->v = v;
-	    pthread_mutex_unlock(&(map->arr_lock[index]));
-	    return;
-	}
-        cur = cur->next;
-    }
-    //printf("after while\n");
-    prev->next = newNode;
-    pthread_mutex_unlock(&(map->arr_lock[index]));
-    //printf("after unlocks\n");
-}
+    struct node * curr = b;
+    struct node * prev = b;
+    while (curr) {
+        prev = curr;
+        if (curr->k == k) {
+            curr->v = v;
+            pthread_spin_unlock(&locks[idx]);
+            return;
+        }
+        curr = curr->next;
+        }
+    prev->next = malloc(sizeof(struct node));
+    curr = prev->next;
+    curr->k = k;
+    curr->v = v;
+    pthread_spin_unlock(&locks[idx]);
+    
+   }
 
 value_type get(key_type k) {
     int index = hash_function(k, hashtable_size);
     //pthread_mutex_lock(&(map->arr_lock[index]));
-    struct node* tmp = map->arr[index];
+//    struct node* tmp = map->arr[index];
+    struct node * tmp = &table[index];
     
     while(tmp != NULL) {
         if(tmp->k == k) {
@@ -94,24 +87,29 @@ value_type get(key_type k) {
         }
         tmp = tmp->next;
     }
-    
     //pthread_mutex_unlock(&(map->arr_lock[index]));
     return 0;
 }
 
 void server_init() {
+    table = malloc(hashtable_size * sizeof(struct node));
+    locks = malloc(hashtable_size * sizeof(pthread_spinlock_t));
+
+    for (int i = 0; i < hashtable_size; i++)
+        pthread_spin_init(&locks[i], PTHREAD_PROCESS_PRIVATE);
+
     int fd = open(shm_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     if (fd < 0)
         perror("open");
 
     struct stat file_stat;
-    if (fstat(fd, &file_stat) < 0) {
+    if (stat(shm_file, &file_stat) < 0) {
         perror("fstat");
         exit(EXIT_FAILURE);
     }
-    int shm_size = (int) file_stat.st_size;
+    int shm_size = file_stat.st_size;
 
-    char *mem = mmap(NULL, shm_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+    char *mem = mmap(NULL, shm_size, PROT_WRITE, MAP_SHARED, fd, 0);
     if (mem == MAP_FAILED) {
         perror("mmap");
         exit(EXIT_FAILURE);
@@ -120,30 +118,21 @@ void server_init() {
 
     ring = (struct ring *)mem;
     shmem_area = mem;
+    init_ring(ring);
 }
 
 void *thread_function() {
     struct buffer_descriptor bd;
     while(true) {
-	//printf("before ring_get\n");
         ring_get(ring, &bd);
-	//printf("after ring_get\n");
         if(bd.req_type == PUT) {
-            //printf("puts\n");
             put(bd.k, bd.v);
-
-	    if(bd.k == 1)
-                printf("put k:%u v:%u answer:%u\n", bd.k, bd.v, get(bd.k));
-	    //printf("finished puts\n");
         } else {
             bd.v = get(bd.k);
-	    if(bd.k == 1)
-                printf("get key:%u value:%u\n", bd.k, bd.v);
         }
-	struct buffer_descriptor* window = (struct buffer_descriptor *)(shmem_area + bd.res_off);
-        //printf("SEG on memcpy?\n");
+        struct buffer_descriptor* window = (struct buffer_descriptor *)(shmem_area + bd.res_off);
         memcpy(window, &bd, sizeof(struct buffer_descriptor));
-	window->ready = READY;
+    	window->ready = READY;
     }
 }
 
@@ -160,41 +149,37 @@ void wait_for_threads() {
             perror("pthread_join");
 }
 
+
+static int parse(int argc, char **argv)
+{
+    int op;
+
+    while ((op = getopt(argc, argv, "n:s:v")) != -1) {
+        switch(op) {
+            case 'n':
+                num_threads = atoi(optarg);
+                break;
+
+            case 's':
+                hashtable_size = atoi(optarg);
+                break;
+        }
+    }
+    return 0;
+}
+
+
+
 // ./server -n serverThreads -s hashtableSize
 int main(int argc, char** argv) {
-    printf("SERVER STARTED \n");
-    for(int i = 0; i < argc; i++) printf("%s\n", argv[i]);
-    if(argc < 3) { // could pass in -v apparently
-        fprintf(stderr, "Usage: %s -n <serverThreads> -s <hashtableSize>\n", argv[0]);
-        return EXIT_FAILURE;
-    }
-
-    // parsing num_threads and tablesize
-    char** tmp = (char**) malloc(sizeof(char*) * 2);
-    tmp[0] = (char*) malloc(sizeof(char) * 50);
-    tmp[1] = (char*) malloc(sizeof(char) * 50);
-    tmp[0] = strtok(argv[1], " ");
-    tmp[1] = strtok(NULL, " ");
-    if(strcmp(tmp[0], "-s") == 0)
-        hashtable_size = atoi(tmp[1]);
-    else
-	num_threads = atoi(tmp[1]);
-    
-    tmp[0] = strtok(argv[2], " ");
-    tmp[1] = strtok(NULL, " ");
-    if(strcmp(tmp[0], "-s") == 0)
-        hashtable_size = atoi(tmp[1]);
-    else
-        num_threads = atoi(tmp[1]);
-
-    //printf("-n: %d -s: %d\n", num_threads, hashtable_size);
+    if (parse(argc, argv) != 0)
+        exit(EXIT_FAILURE);
 
     if(num_threads <= 0 || hashtable_size <= 0) {
         fprintf(stderr, "Invalid argument(s).\n");
         return EXIT_FAILURE;
     }
 
-    //printf("SERVER INIT \n");
     server_init();
     hashtable_init();
     start_threads();
