@@ -49,44 +49,53 @@ void hashtable_init() {
 }
 
 void put(key_type k, value_type v) {
+
     uint index = hash_function(k, hashtable_size);
-    struct node * b = (&table[index]);
+    struct node* newNode = (struct node*) malloc(sizeof(struct node));
 
-    int idx = (b - table) / sizeof(struct node);
-    pthread_spin_lock(&locks[idx]);
+    newNode->k = k;
+    newNode->v = v;
+    newNode->next = NULL;
 
-    struct node * curr = b;
-    struct node * prev = b;
-    while (curr) {
-        prev = curr;
-        if (curr->k == k) {
-            curr->v = v;
-            pthread_spin_unlock(&locks[idx]);
+    pthread_mutex_lock(&(map->arr_lock[index]));
+
+    if(map->arr[index] == NULL) {
+        map->arr[index] = newNode;
+        pthread_mutex_unlock(&(map->arr_lock[index]));
+        return;
+    }
+
+    struct node* cur = map->arr[index];
+    struct node* prev = map->arr[index];
+
+
+    while(cur) {
+        prev = cur;
+        if(cur->k == k) {
+            cur->v = v;
+            pthread_mutex_unlock(&(map->arr_lock[index]));
             return;
         }
-        curr = curr->next;
-        }
-    prev->next = malloc(sizeof(struct node));
-    curr = prev->next;
-    curr->k = k;
-    curr->v = v;
-    pthread_spin_unlock(&locks[idx]);
-    
-   }
+        cur = cur->next;
+    }
+    prev->next = newNode;
+    pthread_mutex_unlock(&(map->arr_lock[index]));
+}
 
 value_type get(key_type k) {
+
     int index = hash_function(k, hashtable_size);
     //pthread_mutex_lock(&(map->arr_lock[index]));
-//    struct node* tmp = map->arr[index];
-    struct node * tmp = &table[index];
-    
+    struct node* tmp = map->arr[index];
+
     while(tmp != NULL) {
         if(tmp->k == k) {
-	    //pthread_mutex_unlock(&(map->arr_lock[index]));
+     //       pthread_mutex_unlock(&(map->arr_lock[index]));
             return tmp->v;
         }
         tmp = tmp->next;
     }
+
     //pthread_mutex_unlock(&(map->arr_lock[index]));
     return 0;
 }
@@ -118,7 +127,6 @@ void server_init() {
 
     ring = (struct ring *)mem;
     shmem_area = mem;
-    init_ring(ring);
 }
 
 void *thread_function() {
